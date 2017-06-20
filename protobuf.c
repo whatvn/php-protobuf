@@ -557,12 +557,7 @@ PHP_METHOD(ProtobufMessage, serializeToString)
 			zend_throw_exception_ex(NULL, 0 TSRMLS_CC, "%s: '%s' field descriptor must be an array", ZSTR_VAL(Z_OBJCE_P(getThis())->name), pb_get_field_name(getThis(), field_number));
 			goto fail;
 		}
-
-		if ((value = zend_hash_index_find(Z_ARRVAL_P(values), field_number)) == NULL) {
-			PB_COMPILE_ERROR("missing '%s' field value", pb_get_field_name(getThis(), field_number));
-			goto fail;
-		}
-
+		value = pb_get_value(getThis(), values, field_number);
 		if ((type = pb_get_field_type(getThis(), field_descriptor, field_number)) == NULL)
 			goto fail;
 
@@ -622,7 +617,7 @@ PHP_METHOD(ProtobufMessage, set)
 	if ((values = pb_get_values(getThis())) == NULL)
 		RETURN_THIS();
 
-	if ((old_value = pb_get_value(getThis(), values, (zend_ulong)field_number)) == NULL)
+        if ((old_value = pb_get_value(getThis(), values, (zend_ulong)field_number)) == NULL)
 		RETURN_THIS();
 
 	if (Z_TYPE_P(value) == IS_NULL) {
@@ -1029,14 +1024,22 @@ static const char *pb_get_wire_type_name(int wire_type)
 
 static zval *pb_get_value(zval *this, zval *values, zend_ulong field_number)
 {
-	zval *value = NULL;
-    TSRMLS_FETCH();
+        zval *value = NULL;
+        TSRMLS_FETCH();
+        zend_ulong hash_number;
+        HashPosition i;
 
-    value = zend_hash_index_find(Z_ARRVAL_P(values), field_number);
-    if (value == NULL)
-		PB_COMPILE_ERROR_EX(this, "missing %lu field value", (uint64_t)field_number);
+        PB_FOREACH(&i, Z_ARRVAL_P(values)) {
+                zend_hash_get_current_key_ex(Z_ARRVAL_P(values), NULL, &hash_number, &i);
+                if (hash_number == field_number) {
+                        value = zend_hash_get_current_data_ex(Z_ARRVAL_P(values), &i);
+                        break;  
+                }
+        }
+        if (value == NULL)
+                PB_COMPILE_ERROR_EX(this, "missing %lu field value", (uint64_t)field_number);
 
-    return value;
+        return value;
 }
 
 static zval *pb_get_values(zval *this)
